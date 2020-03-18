@@ -242,7 +242,7 @@ Else{
 
     If($SuperScopeSheet){
         $SuperScopeStyle = @()
-        $SuperScopeStyle += New-ExcelStyle -Range "'Super Scopes!'$SuperScopeHeaderRow"
+        $SuperScopeStyle += New-ExcelStyle -Range "'Super Scopes!'$SuperScopeHeaderRow" -HorizontalAlignment Center
         $SuperScopeSheet | Sort-Object DhcpServer,SuperScopeName,Member | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Super Scopes" -Style $SuperScopeStyle
     }
 
