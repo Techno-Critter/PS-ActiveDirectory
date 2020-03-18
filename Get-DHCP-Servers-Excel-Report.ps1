@@ -13,6 +13,50 @@ $Date = Get-Date -Format yyyyMMdd
 $Workbook = "C:\Temp\DHCP_Servers_$Date.xlsx"
 #endregion
 
+# FUNCTION: Convert number of object items into Excel column headers
+Function Get-ColumnName ([int]$ColumnCount){
+    If(($ColumnCount -le 702) -and ($ColumnCount -ge 1)){
+        $ColumnCount = [Math]::Floor($ColumnCount)
+        $CharStart = 64
+        $FirstCharacter = $null
+
+        # Convert number into double letter column name (AA-ZZ)
+        If($ColumnCount -gt 26){
+            $FirstNumber = [Math]::Floor(($ColumnCount)/26)
+            $SecondNumber = ($ColumnCount) % 26
+
+            # Reset increment for base-26
+            If($SecondNumber -eq 0){
+                $FirstNumber--
+                $SecondNumber = 26
+            }
+
+            # Left-side column letter (first character from left to right)
+            $FirstLetter = [int]($FirstNumber + $CharStart)
+            $FirstCharacter = [char]$FirstLetter
+
+            # Right-side column letter (second character from left to right)
+            $SecondLetter = $SecondNumber + $CharStart
+            $SecondCharacter = [char]$SecondLetter
+
+            # Combine both letters into column name
+            $CharacterOutput = $FirstCharacter + $SecondCharacter
+        }
+
+        # Convert number into single letter column name (A-Z)
+        Else{
+            $CharacterOutput = [char]($ColumnCount + $CharStart)
+        }
+    }
+    Else{
+        $CharacterOutput = "ZZ"
+    }
+
+    # Output column name
+    $CharacterOutput
+}
+
+# If workbook already exists, terminate; else continue
 If(Test-Path $Workbook){
     Write-Warning "The file $Workbook already exists. Script terminated."
 }
@@ -127,20 +171,90 @@ Else{
     }
 
 #region Output to Excel
+
+    # Server worksheet
+    $ServerColumnCount = Get-ColumnName ($ServerSheet | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $ServerHeaderRow = "`$A`$1:`$$ServerColumnCount`$1"
     $ServerSheetLastRow = ($ServerSheet | Measure-Object).Count + 1
+
     If($ServerSheetLastRow -gt 1){
+        $ServerSheetStyle = @()
+        $ServerSheetStyle += New-ExcelStyle -Range "'Servers!'$ServerHeaderRow" -HorizontalAlignment Center
+
+        $ServerSheetConditionalText = @()
+        $ServerSheetConditionalText += New-ConditionalText -Range $ServerConflictDetectColumn -ConditionalType LessThan 3 -ConditionalTextColor Brown -BackgroundColor Wheat
+
         $ServerConflictDetectColumn = "'Servers'!`$F`$2:`$F`$$ServerSheetLastRow"
-        $ServerSheet | Sort-Object "Server Name" | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Servers" -ConditionalText $(
-            New-ConditionalText -Range $ServerConflictDetectColumn -ConditionalType LessThan 3 -ConditionalTextColor Brown -BackgroundColor Wheat
-        )
+        $ServerSheet | Sort-Object ServerName | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Servers" -ConditionalText $ServerSheetConditionalText -Style $ServerSheetStyle
     }
-    $ADListSheet | Sort-Object "DnsName" | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "AD List"
-    $ScopeSheet | Sort-Object "Server Name","ScopeID" | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Scopes"
-    $ServerOptionsSheet | Sort-Object "Server Name","OptionID" | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Server Options"
-    $ScopeOptionsSheet | Sort-Object "Server Name","OptionID" | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Scope Options"
-    $SuperScopeSheet | Sort-Object "DhcpServer","SuperScopeName","Member" | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Super Scopes"
+
+    # AD List worksheet
+    $ADListColumnCount = Get-ColumnName ($ADListSheet | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $ADListHeaderRow = "`$A`$1:`$$ADListColumnCount`$1"
+    $ADListLastrow = ($ADListSheet | Measure-Object).Count + 1
+
+    If($ADListLastrow -gt 1){
+        $ADListSheetStyle = @()
+        $ADListSheetStyle += New-ExcelStyle -Range "'AD List!'$ADListHeaderRow" -HorizontalAlignment Center
+
+        $ADListSheet | Sort-Object DnsName | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "AD List" -Style $ADListSheetStyle
+    }
+
+    # Scope worksheet
+    $ScopeColumnCount = Get-ColumnName ($ScopeSheet | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $ScopeHeaderRow = "`$A`$1:`$$ScopeColumnCount`$1"
+    $ScopeSheetLastRow = ($ScopeSheet | Measure-Object).Count + 1
+
+    If($ScopeSheetLastRow -gt 1){
+        $ScopeSheetStyle = @()
+        $ScopeSheetStyle += New-ExcelStyle -Range "'Scopes!'$ScopeHeaderRow" -HorizontalAlignment Center
+
+        $ScopeSheet | Sort-Object ServerName,ScopeID | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Scopes" -Style $ScopeSheetStyle
+    }
+
+    # Server Options worksheet
+    $ServerOptionsColumnCount = Get-ColumnName ($ServerOptionsSheet | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $ServerOptionsHeaderRow = "`$A`$1:`$$ServerOptionsColumnCount`$1"
+    $ServerOptionsLastRow = ($ServerOptionsSheet | Measure-Object).Count + 1
+
+    If($ServerOptionsLastRow -gt 1){
+        $ServerOptionsStyle = @()
+        $ServerOptionsStyle += New-ExcelStyle -Range "'Server Options!'$ServerOptionsHeaderRow" -HorizontalAlignment Center
+
+        $ServerOptionsSheet | Sort-Object ServerName,OptionID | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Server Options" -Style $ServerOptionsStyle
+    }
+
+    # Scope Options worksheet
+    $ScopeOptionsColumnCount = Get-ColumnName ($ScopeOptionsSheet | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $ScopeOptionsHeaderRow = "`$A`$1:`$$ScopeOptionsColumnCount`$1"
+    $ScopeOptionsLastRow = ($ScopeOptionsSheet | Measure-Object).Count + 1
+
+    If($ScopeOptionsLastRow -gt 1){
+        $ScopeOptionsStyle = @()
+        $ScopeOptionsStyle += New-ExcelStyle -Range "'Scope Options!'$ScopeOptionsHeaderRow" -HorizontalAlignment Center
+
+        $ScopeOptionsSheet | Sort-Object ServerName,OptionID | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Scope Options" -Style $ScopeOptionsStyle
+    }
+
+    # SuperScope worksheet
+    $SuperScopeColumnCount = Get-ColumnName ($SuperScopeSheet | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $SuperScopeHeaderRow = "`$A`$1:`$$SuperScopeColumnCount`$1"
+
+    If($SuperScopeSheet){
+        $SuperScopeStyle = @()
+        $SuperScopeStyle += New-ExcelStyle -Range "'Super Scopes!'$SuperScopeHeaderRow"
+        $SuperScopeSheet | Sort-Object DhcpServer,SuperScopeName,Member | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Super Scopes" -Style $SuperScopeStyle
+    }
+
+    # Error worksheet
+    $ErrorColumnCount = Get-ColumnName ($Errors | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $ErrorHeaderRow = "`$A`$1:`$$ErrorColumnCount`$1"
+
     If($Errors){
-        $Errors | Sort-Object "DnsName" | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Errors"
+        $ErrorStyle = @()
+        $ErrorStyle += New-ExcelStyle -Range "'Errors'$ErrorHeaderRow" -HorizontalAlignment Center
+
+        $Errors | Sort-Object DnsName | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Errors" -Style $ErrorStyle
     }
 
 #endregion
