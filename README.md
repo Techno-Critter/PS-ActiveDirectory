@@ -4,5 +4,6 @@
 <ul>
   <li>Domain Controllers
   <li>Sites and Services
+  <li>Home Directories
   <li>DHCP
 </ul>
