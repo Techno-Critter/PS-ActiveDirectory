@@ -9,10 +9,8 @@ Get a specified list of sites and subnets from AD
 
 #Requires -Module ImportExcel
 
-#region Set logfile name
 $Date = Get-Date -Format yyMMdd
 $LogFile = "C:\Temp\Domain_Sites_$Date.xlsx"
-#endregion
 
 #region Functions
 # Pull Names of sites in ADReplication queries and combine into single string for visual output
@@ -24,51 +22,106 @@ Function Get-SitePartners($SiteIncludes){
     $Output = $SitePartners.Name -join ", "
     $Output
 }
+
+# Convert number of object items into Excel column headers
+Function Get-ColumnName ([int]$ColumnCount){
+    If(($ColumnCount -le 702) -and ($ColumnCount -ge 1)){
+        $ColumnCount = [Math]::Floor($ColumnCount)
+        $CharStart = 64
+        $FirstCharacter = $null
+
+        # Convert number into double letter column name (AA-ZZ)
+        If($ColumnCount -gt 26){
+            $FirstNumber = [Math]::Floor(($ColumnCount)/26)
+            $SecondNumber = ($ColumnCount) % 26
+
+            # Reset increment for base-26
+            If($SecondNumber -eq 0){
+                $FirstNumber--
+                $SecondNumber = 26
+            }
+
+            # Left-side column letter (first character from left to right)
+            $FirstLetter = [int]($FirstNumber + $CharStart)
+            $FirstCharacter = [char]$FirstLetter
+
+            # Right-side column letter (second character from left to right)
+            $SecondLetter = $SecondNumber + $CharStart
+            $SecondCharacter = [char]$SecondLetter
+
+            # Combine both letters into column name
+            $CharacterOutput = $FirstCharacter + $SecondCharacter
+        }
+
+        # Convert number into single letter column name (A-Z)
+        Else{
+            $CharacterOutput = [char]($ColumnCount + $CharStart)
+        }
+    }
+    Else{
+        $CharacterOutput = "ZZ"
+    }
+
+    # Output column name
+    $CharacterOutput
+}
 #endregion
 
-#region Gather data
-# Get subnets
+#region Subnets
 $SubnetsRaw = Get-ADReplicationSubnet -Filter * -Properties Name,Location,Site,Description | Sort-Object Name | Select-Object Name, Location, Description, Site
 $Subnets= @()
 ForEach($Subnet in $SubnetsRaw){
-    $SubnetObj = [PSCustomObject]@{
-        Subnet = $Subnet.Name
-        Location = $Subnet.Location
-        Description = $Subnet.Description
-        Site = Get-SitePartners $Subnet.Site #Change DistinguishedName to Name
+    $Subnets += [PSCustomObject]@{
+        "Subnet"      = $Subnet.Name
+        "Location"    = $Subnet.Location
+        "Description" = $Subnet.Description
+        "Site"        = Get-SitePartners $Subnet.Site #Change DistinguishedName to Name
     }
-    $Subnets += $SubnetObj
 }
+#endregion
 
-# Get sites
+# Get Sites
 $Sites = Get-ADReplicationSite -Properties * -Filter * | Sort-Object Name | Select-Object Name,Location,Description
 
-# Get site links
+#region Site Links
 $SiteLinksRaw = Get-ADReplicationSiteLink -Filter * -Properties * | Sort-Object Name | Select-Object Name,Description,Cost,ReplicationFrequencyInMinutes,SitesIncluded
 $SiteLinks = @()
 ForEach($SiteLink in $SiteLinksRaw){
-    $SiteLinksObj = [PSCustomObject]@{
-        Name = $SiteLink.Name
-        Description = $SiteLink.Description
-        Cost = $SiteLink.Cost
-        RepFreq = $SiteLink.ReplicationFrequencyInMinutes
-        MemberSites = Get-SitePartners $SiteLink.SitesIncluded #Change DistinguishedName to Name
-        MemberCount = ($SiteLink.SitesIncluded | Measure-Object).Count
+    $SiteLinks += [PSCustomObject]@{
+        "Name"         = $SiteLink.Name
+        "Description"  = $SiteLink.Description
+        "Cost"         = $SiteLink.Cost
+        "RepFreq"      = $SiteLink.ReplicationFrequencyInMinutes
+        "Member Sites" = Get-SitePartners $SiteLink.SitesIncluded #Change DistinguishedName to Name
     }
-    $SiteLinks += $SiteLinksObj
 }
 #endregion
 
-#region Export to Excel
-$Subnets | Sort-Object Subnet | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Subnets"
-$Sites | Sort-Object Name | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Sites"
-$SiteLinks | Sort-Object Name | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Links"
+#region Output to Excel
+# Subnets sheet
+$SubnetHeaderCount = Get-ColumnName ($Subnets | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+$SubnetHeaderRow = "`$A`$1:`$$SubnetHeaderCount`$1"
+$SubnetSheetStyle = New-ExcelStyle -Range "'File Servers'$SubnetHeaderRow" -HorizontalAlignment Center
+$Subnets | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Subnets" -Style $SubnetSheetStyle
+
+# Sites sheet
+$SitesHeaderCount = Get-ColumnName ($Sites | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+$SitesHeaderRow = "`$A`$1:`$$SitesHeaderCount`$1"
+$SitesSheetStyle = New-ExcelStyle -Range "'File Servers'$SitesHeaderRow" -HorizontalAlignment Center
+$Sites | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Sites" -Style $SitesSheetStyle
+
+# SiteLinks sheet
+$SiteLinkHeaderCount = Get-ColumnName ($SiteLinks | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+$SiteLinkHeaderRow = "`$A`$1:`$$SiteLinkHeaderCount`$1"
+$SiteLinkSheetStyle = New-ExcelStyle -Range "'File Servers'$SiteLinkHeaderRow" -HorizontalAlignment Center
+$SiteLinks | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Links" -Style $SiteLinkSheetStyle
 #endregion
 
 #region Output to screen
-Write-Output $Subnets | Format-Table
-Write-Output $Sites | Format-Table
-Write-Output $SiteLinks | Select-Object Name,Description,Cost,RepFreq,MemberCount,MemberSites | Format-Table
+Write-Output $Subnets
 Write-Output ("Subnet count: " + ($Subnets | Measure-Object).Count)
+Write-Output $Sites
 Write-Output ("Site count: " + ($Sites | Measure-Object).Count)
-Write-Output ("Link count: " + ($SiteLinks | Measure-Object).Count)
+Write-Output $SiteLinks
+Write-Output ("Links count: " + ($SiteLinks | Measure-Object).Count)
+#endregion
