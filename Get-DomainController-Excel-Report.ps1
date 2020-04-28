@@ -4,7 +4,7 @@ Date: 18Nov2019
 Crap: Get domain controller properties and outputs to Excel report
 ### Must have ImportExcel module installed! ###
 ### https://github.com/dfinke/ImportExcel  ###
-### Function stolen from: https://gallery.technet.microsoft.com/scriptcenter/Transpose-Object-cf517eb5
+### Transpose function stolen from: https://gallery.technet.microsoft.com/scriptcenter/Transpose-Object-cf517eb5
 #>
 
 #Requires -Module ImportExcel
@@ -14,6 +14,8 @@ $DateName = Get-Date -Format yyyyMMdd
 $Domain = "acme.com"
 $LogFile = "C:\Temp\Domain Controllers\DC_$DateName.xlsx"
 
+## FUNCTIONS
+# Transpose object for adjusting output to Excel
 Function Format-TransposeObject{
     [CmdletBinding()]
     Param([OBJECT][Parameter(ValueFromPipeline = $TRUE)]$InputObject)
@@ -66,11 +68,54 @@ Function Format-TransposeObject{
     }
 }
 
-# Begin script; exit if logfile already exists
+# Convert number of object items into Excel column headers
+Function Get-ColumnName ([int]$ColumnCount){
+    If(($ColumnCount -le 702) -and ($ColumnCount -ge 1)){
+        $ColumnCount = [Math]::Floor($ColumnCount)
+        $CharStart = 64
+        $FirstCharacter = $null
+
+        # Convert number into double letter column name (AA-ZZ)
+        If($ColumnCount -gt 26){
+            $FirstNumber = [Math]::Floor(($ColumnCount)/26)
+            $SecondNumber = ($ColumnCount) % 26
+
+            # Reset increment for base-26
+            If($SecondNumber -eq 0){
+                $FirstNumber--
+                $SecondNumber = 26
+            }
+
+            # Left-side column letter (first character from left to right)
+            $FirstLetter = [int]($FirstNumber + $CharStart)
+            $FirstCharacter = [char]$FirstLetter
+
+            # Right-side column letter (second character from left to right)
+            $SecondLetter = $SecondNumber + $CharStart
+            $SecondCharacter = [char]$SecondLetter
+
+            # Combine both letters into column name
+            $CharacterOutput = $FirstCharacter + $SecondCharacter
+        }
+
+        # Convert number into single letter column name (A-Z)
+        Else{
+            $CharacterOutput = [char]($ColumnCount + $CharStart)
+        }
+    }
+    Else{
+        $CharacterOutput = "ZZ"
+    }
+
+    # Output column name
+    $CharacterOutput
+}
+
+## Begin script
+# Exit if logfile already exists
 If(Test-Path $LogFile){
     Write-Host "The file $LogFile already exists. Script terminated."
 }
-
 # Get domain controllers and info from domain
 Else{
     Import-Module ActiveDirectory
@@ -99,7 +144,7 @@ Else{
         }
         # Ping
         $Online = (Test-Connection -ComputerName $DC.HostName -Quiet -Count 2)
-        # Up-time
+        # Gather data
         If($Online){
             $DCUpCount++
             Try{
@@ -160,16 +205,36 @@ Else{
         "Online"       = $DCUpCount
     }
 
-    # Export to Excel
+    ## Export to Excel
+    # DC worksheet
+    $DCArrayHeaderCount = Get-ColumnName ($DCArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $DCArrayHeaderRow = "`$A`$1:`$$DCArrayHeaderCount`$1"
     $LastRow = ($DCArray | Measure-Object).Count + 1
     $GC = "DCs!`$B`$2:`$B`$$LastRow"
     $Online = "DCs!`$G`$2:`$G`$$LastRow"
-    $DCArray | Sort-Object Name | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "DCs" -ConditionalText $(
-        New-ConditionalText -Range $GC -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Brown -BackgroundColor Wheat
-        New-ConditionalText -Range $Online -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Maroon -BackgroundColor Pink
-    )
-    $DomainStatObj | Format-TransposeObject | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Status"
+
+    $DCArrayStyle = @()
+    $DCArrayStyle += New-ExcelStyle -Range "'DCs'$DCArrayHeaderRow" -HorizontalAlignment Center
+
+    $DCArrayConditionalText = @()
+    $DCArrayConditionalText += New-ConditionalText -Range $GC -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Brown -BackgroundColor Wheat
+    $DCArrayConditionalText += New-ConditionalText -Range $Online -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Maroon -BackgroundColor Pink
+
+    $DCArray | Sort-Object "Name" | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "DCs" -ConditionalText $DCArrayConditionalText -Style $DCArrayStyle
+    
+    # Status worksheet
+    $DomainStatHeaderCount = Get-ColumnName ($DomainStatObj | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $DomainStatHeaderRow = "`$A`$1:`$$DomainStatHeaderCount`$1"
+    $DomainStatStyle = @()
+    $DomainStatStyle += New-ExcelStyle -Range "'Status'$DomainStatHeaderRow" -HorizontalAlignment Center
+    $DomainStatObj | Format-TransposeObject | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Status" -Style $DomainStatStyle
+    
+    # Errors worksheet
     If($ErrorArray){
-        $ErrorArray | Sort-Object "Name" | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Errors"
+        $ErrorArrayHeaderCount = Get-ColumnName ($DCArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+        $ErrorArrayHeaderRow = "`$A`$1:`$$ErrorArrayHeaderCount`$1"
+        $ErrorArrayStyle = @()
+        $ErrorArrayStyle += New-ExcelStyle -Range "'Errors'$ErrorArrayHeaderRow" -HorizontalAlignment Center
+        $ErrorArray | Sort-Object "Name" | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Errors" -Style $ErrorArrayStyle
     }
 }
