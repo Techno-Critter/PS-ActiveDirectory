@@ -1,7 +1,7 @@
 <#
 Author: Stan Crider
 Date: 18Nov2019
-Crap: Get domain controller properties and outputs to Excel report
+Crap: Get domain controller properties from local domain and outputs to Excel report
 ### Must have ImportExcel module installed! ###
 ### https://github.com/dfinke/ImportExcel  ###
 ### Transpose function stolen from: https://gallery.technet.microsoft.com/scriptcenter/Transpose-Object-cf517eb5
@@ -11,7 +11,7 @@ Crap: Get domain controller properties and outputs to Excel report
 
 # User variables
 $DateName = Get-Date -Format yyyyMMdd
-$Domain = "acme.com"
+$Domain = (Get-ADDomain).DNSroot
 $LogFile = "C:\Temp\Domain Controllers\DC_$DateName.xlsx"
 
 ## FUNCTIONS
@@ -119,7 +119,7 @@ If(Test-Path $LogFile){
 # Get domain controllers and info from domain
 Else{
     Import-Module ActiveDirectory
-    $DomainControllers = Get-ADDomainController -Filter { Domain -eq $Domain } | Sort-Object HostName
+    $DomainControllers = Get-ADDomainController -Filter * -Server $Domain | Sort-Object HostName
     $ForestProps = Get-ADForest
     $DomainProps = Get-ADDomain
     $GCCount = 0
