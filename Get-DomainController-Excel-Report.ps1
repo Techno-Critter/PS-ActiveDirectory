@@ -11,11 +11,7 @@ Crap: Get domain controller properties from local domain and outputs to Excel re
 
 # User variables
 $DateName = Get-Date -Format yyyyMMdd
-<<<<<<< HEAD
-$Domain = (Get-ADDomain).DNSroot
-=======
 $Domain = (Get-ADDomain).DNSRoot
->>>>>>> Update local domain pull and ADDC command
 $LogFile = "C:\Temp\Domain Controllers\DC_$DateName.xlsx"
 
 ## FUNCTIONS
