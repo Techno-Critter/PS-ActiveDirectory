@@ -5,4 +5,6 @@
   <li>Domain Controllers
   <li>Sites and Services
   <li>DHCP
+  <li>Computer Accounts
+  <li>Home drives
 </ul>
