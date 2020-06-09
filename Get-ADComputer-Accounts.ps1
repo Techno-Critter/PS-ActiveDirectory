@@ -108,6 +108,15 @@ Else{
     }
 
     ## Output
+    # Create Excel standard configuration properties
+    $ExcelProps = @{
+        Autosize = $true;
+        FreezeTopRow = $true;
+        BoldTopRow = $true;
+    }
+
+    $ExcelProps.Path = $Workbook
+
     # Computer worksheet
     $ComputerArrayColumnCount = Get-ColumnName ($ComputerArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
     $ComputerArrayHeaderRow = "`$A`$1:`$$ComputerArrayColumnCount`$1"
@@ -122,7 +131,7 @@ Else{
     $ComputerArrayConditionalFormatting += New-ConditionalText -Range $EnabledColumn -ConditionalType ContainsText "FALSE" -ConditionalTextColor Brown -BackgroundColor Yellow
     $ComputerArrayConditionalFormatting += New-ConditionalText -Range $PasswordAgeColumn -ConditionalType GreaterThan 180 -ConditionalTextColor Maroon -BackgroundColor Pink
 
-    $ComputerArray | Export-Excel -Path $Workbook -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Computers" -ConditionalText $ComputerArrayConditionalFormatting -Style $ComputerArrayStyle
+    $ComputerArray | Export-Excel @ExcelProps -WorkSheetname "Computers" -ConditionalText $ComputerArrayConditionalFormatting -Style $ComputerArrayStyle
     
     # OS Count worksheet
     $OSArrayColumnCount = Get-ColumnName ($OperatingSystemArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
@@ -130,5 +139,5 @@ Else{
 
     $OSArrayStyle = New-ExcelStyle -Range "'Computers'!$OSArrayHeaderRow" -HorizontalAlignment Center
 
-    $OperatingSystemArray | Export-Excel -Path $Workbook -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "OS Count" -Style $OSArrayStyle
+    $OperatingSystemArray | Export-Excel @ExcelProps -WorkSheetname "OS Count" -Style $OSArrayStyle
 }
