@@ -98,23 +98,32 @@ ForEach($SiteLink in $SiteLinksRaw){
 #endregion
 
 #region Output to Excel
+# Create Excel standard configuration properties
+$ExcelProps = @{
+    Autosize = $true;
+    FreezeTopRow = $true;
+    BoldTopRow = $true;
+}
+
+$ExcelProps.Path = $LogFile
+
 # Subnets sheet
 $SubnetHeaderCount = Get-ColumnName ($Subnets | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
 $SubnetHeaderRow = "`$A`$1:`$$SubnetHeaderCount`$1"
 $SubnetSheetStyle = New-ExcelStyle -Range "'File Servers'$SubnetHeaderRow" -HorizontalAlignment Center
-$Subnets | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Subnets" -Style $SubnetSheetStyle
+$Subnets | Export-Excel @ExcelProps -WorkSheetname "Subnets" -Style $SubnetSheetStyle
 
 # Sites sheet
 $SitesHeaderCount = Get-ColumnName ($Sites | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
 $SitesHeaderRow = "`$A`$1:`$$SitesHeaderCount`$1"
 $SitesSheetStyle = New-ExcelStyle -Range "'File Servers'$SitesHeaderRow" -HorizontalAlignment Center
-$Sites | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Sites" -Style $SitesSheetStyle
+$Sites | Export-Excel @ExcelProps -WorkSheetname "Sites" -Style $SitesSheetStyle
 
 # SiteLinks sheet
 $SiteLinkHeaderCount = Get-ColumnName ($SiteLinks | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
 $SiteLinkHeaderRow = "`$A`$1:`$$SiteLinkHeaderCount`$1"
 $SiteLinkSheetStyle = New-ExcelStyle -Range "'File Servers'$SiteLinkHeaderRow" -HorizontalAlignment Center
-$SiteLinks | Export-Excel -Path $LogFile -AutoSize -FreezeTopRow -BoldTopRow -WorkSheetname "Links" -Style $SiteLinkSheetStyle
+$SiteLinks | Export-Excel @ExcelProps -WorkSheetname "Links" -Style $SiteLinkSheetStyle
 #endregion
 
 #region Output to screen
