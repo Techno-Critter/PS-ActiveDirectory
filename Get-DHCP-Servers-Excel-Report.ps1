@@ -180,6 +180,15 @@ Else{
 
 #region Output to Excel
 
+    # Create Excel standard configuration properties
+    $ExcelProps = @{
+        Autosize = $true;
+        FreezeTopRow = $true;
+        BoldTopRow = $true;
+    }
+
+    $ExcelProps.Path = $Workbook
+
     # Server worksheet
     $ServerSheetLastRow = ($ServerSheet | Measure-Object).Count + 1
     If($ServerSheetLastRow -gt 1){
@@ -193,7 +202,7 @@ Else{
         $ServerSheetConditionalText = @()
         $ServerSheetConditionalText += New-ConditionalText -Range $ServerConflictDetectColumn -ConditionalType LessThan 3 -ConditionalTextColor Brown -BackgroundColor Wheat
 
-        $ServerSheet | Sort-Object ServerName | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Servers" -ConditionalText $ServerSheetConditionalText -Style $ServerSheetStyle
+        $ServerSheet | Sort-Object ServerName | Export-Excel @ExcelProps -WorksheetName "Servers" -ConditionalText $ServerSheetConditionalText -Style $ServerSheetStyle
     }
 
     # AD List worksheet
@@ -205,7 +214,7 @@ Else{
         $ADListSheetStyle = @()
         $ADListSheetStyle += New-ExcelStyle -Range "'AD List!'$ADListHeaderRow" -HorizontalAlignment Center
         
-        $ADListSheet | Sort-Object DnsName | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "AD List" -Style $ADListSheetStyle
+        $ADListSheet | Sort-Object DnsName | Export-Excel @ExcelProps -WorksheetName "AD List" -Style $ADListSheetStyle
     }
 
     # Scope worksheet
@@ -217,7 +226,7 @@ Else{
         $ScopeSheetStyle = @()
         $ScopeSheetStyle += New-ExcelStyle -Range "'Scopes!'$ScopeHeaderRow" -HorizontalAlignment Center
 
-        $ScopeSheet | Sort-Object ServerName,ScopeID | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Scopes" -Style $ScopeSheetStyle
+        $ScopeSheet | Sort-Object ServerName,ScopeID | Export-Excel @ExcelProps -WorksheetName "Scopes" -Style $ScopeSheetStyle
     }
 
     # Server Options worksheet
@@ -229,7 +238,7 @@ Else{
         $ServerOptionsStyle = @()
         $ServerOptionsStyle += New-ExcelStyle -Range "'Server Options!'$ServerOptionsHeaderRow" -HorizontalAlignment Center
 
-        $ServerOptionsSheet | Sort-Object ServerName,OptionID | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Server Options" -Style $ServerOptionsStyle
+        $ServerOptionsSheet | Sort-Object ServerName,OptionID | Export-Excel @ExcelProps -WorksheetName "Server Options" -Style $ServerOptionsStyle
     }
 
     # Scope Options worksheet
@@ -241,7 +250,7 @@ Else{
         $ScopeOptionsStyle = @()
         $ScopeOptionsStyle += New-ExcelStyle -Range "'Scope Options!'$ScopeOptionsHeaderRow" -HorizontalAlignment Center
 
-        $ScopeOptionsSheet | Sort-Object ServerName,OptionID | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Scope Options" -Style $ScopeOptionsStyle
+        $ScopeOptionsSheet | Sort-Object ServerName,OptionID | Export-Excel @ExcelProps -WorksheetName "Scope Options" -Style $ScopeOptionsStyle
     }
 
     # SuperScope worksheet
@@ -252,7 +261,7 @@ Else{
         $SuperScopeStyle = @()
         $SuperScopeStyle += New-ExcelStyle -Range "'Super Scopes!'$SuperScopeHeaderRow" -HorizontalAlignment Center
         
-        $SuperScopeSheet | Sort-Object DhcpServer,SuperScopeName,Member | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Super Scopes" -Style $SuperScopeStyle
+        $SuperScopeSheet | Sort-Object DhcpServer,SuperScopeName,Member | Export-Excel @ExcelProps -WorksheetName "Super Scopes" -Style $SuperScopeStyle
     }
 
     # Error worksheet
@@ -263,7 +272,7 @@ Else{
         $ErrorStyle = @()
         $ErrorStyle += New-ExcelStyle -Range "'Errors'$ErrorHeaderRow" -HorizontalAlignment Center
 
-        $Errors | Sort-Object DnsName | Export-Excel -Path $Workbook -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Errors" -Style $ErrorStyle
+        $Errors | Sort-Object DnsName | Export-Excel @ExcelProps -WorksheetName "Errors" -Style $ErrorStyle
     }
 
 #endregion
