@@ -206,6 +206,15 @@ Else{
     }
 
     ## Export to Excel
+    # Create Excel standard configuration properties
+    $ExcelProps = @{
+        Autosize = $true;
+        FreezeTopRow = $true;
+        BoldTopRow = $true;
+    }
+
+    $ExcelProps.Path = $LogFile
+
     # DC worksheet
     $DCArrayHeaderCount = Get-ColumnName ($DCArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
     $DCArrayHeaderRow = "`$A`$1:`$$DCArrayHeaderCount`$1"
@@ -220,14 +229,14 @@ Else{
     $DCArrayConditionalText += New-ConditionalText -Range $GC -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Brown -BackgroundColor Wheat
     $DCArrayConditionalText += New-ConditionalText -Range $Online -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Maroon -BackgroundColor Pink
 
-    $DCArray | Sort-Object "Name" | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "DCs" -ConditionalText $DCArrayConditionalText -Style $DCArrayStyle
+    $DCArray | Sort-Object "Name" | Export-Excel @ExcelProps -WorksheetName "DCs" -ConditionalText $DCArrayConditionalText -Style $DCArrayStyle
     
     # Status worksheet
     $DomainStatHeaderCount = Get-ColumnName ($DomainStatObj | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
     $DomainStatHeaderRow = "`$A`$1:`$$DomainStatHeaderCount`$1"
     $DomainStatStyle = @()
     $DomainStatStyle += New-ExcelStyle -Range "'Status'$DomainStatHeaderRow" -HorizontalAlignment Center
-    $DomainStatObj | Format-TransposeObject | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Status" -Style $DomainStatStyle
+    $DomainStatObj | Format-TransposeObject | Export-Excel @ExcelProps -WorksheetName "Status" -Style $DomainStatStyle
     
     # Errors worksheet
     If($ErrorArray){
@@ -235,6 +244,6 @@ Else{
         $ErrorArrayHeaderRow = "`$A`$1:`$$ErrorArrayHeaderCount`$1"
         $ErrorArrayStyle = @()
         $ErrorArrayStyle += New-ExcelStyle -Range "'Errors'$ErrorArrayHeaderRow" -HorizontalAlignment Center
-        $ErrorArray | Sort-Object "Name" | Export-Excel -Path $LogFile -FreezeTopRow -BoldTopRow -AutoSize -WorksheetName "Errors" -Style $ErrorArrayStyle
+        $ErrorArray | Sort-Object "Name" | Export-Excel @ExcelProps -WorksheetName "Errors" -Style $ErrorArrayStyle
     }
 }
