@@ -137,7 +137,7 @@ Else{
         $DCDNSSettings = $null
         $TimeZone = $null
         $CurrentTime = $null
-        $ADCompProp = Get-ADComputer -Identity $DC.Name -Properties Description
+        $ADCompProp = Get-ADComputer -Identity $DC.Name -Properties Description,Location
        # FSMO roles
         If($null -ne $DC.OperationMasterRoles){
             $FSMORoles = $DC.OperationMasterRoles -join ", "
@@ -189,6 +189,7 @@ Else{
             "LastBoot"      = $Reboot
             "Current Time"  = $CurrentTime
             "TimeZone"      = $TimeZone.Caption
+            "Location"      = $ADCompProp.Location
             "Description"   = $ADCompProp.Description
             "FSMO"          = $FSMORoles
         }
