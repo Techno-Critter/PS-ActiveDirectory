@@ -19,7 +19,7 @@ Function Get-SitePartners($SiteIncludes){
     ForEach($LSite in $SiteIncludes){
         $SitePartners += Get-ADReplicationSite -Identity $LSite
     }
-    $Output = $SitePartners.Name -join ", "
+    $Output = ($SitePartners.Name | Sort-Object) -join ", "
     $Output
 }
 
