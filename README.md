@@ -5,6 +5,7 @@
   <li>Domain Controllers
   <li>Sites and Services
   <li>DHCP
+  <li>Group Policy Objects
   <li>Computer Accounts
   <li>Home drives
 </ul>
