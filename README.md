@@ -7,5 +7,6 @@
   <li>DHCP
   <li>Group Policy Objects
   <li>Computer Accounts
+  <li>User Accounts
   <li>Home drives
 </ul>
