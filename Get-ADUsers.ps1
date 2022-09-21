@@ -222,7 +222,8 @@ Else{
                 "Country"         = $User.co
                 "Notes"           = $User.info
                 "AD Path"         = $User.DistinguishedName
-                "Domain Name"     = $User.CanonicalName
+                "Canonical Name"  = $User.CanonicalName
+                "Domain"          = $Domain
             }
         }
     }
