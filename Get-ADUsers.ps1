@@ -261,6 +261,6 @@ Else{
         $ExcelProps.ConditionalFormat = $UserSheetConditionalText
 
         # Apply Style and Format, sort and output
-        $UserArray | Sort-Object "Domain Name","Name" | Export-Excel @ExcelProps
+        $UserArray | Sort-Object "Domain","Name" | Export-Excel @ExcelProps
     }
 }
