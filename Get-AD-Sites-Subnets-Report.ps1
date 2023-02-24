@@ -9,18 +9,58 @@ Get a specified list of sites and subnets from AD
 
 #Requires -Module ImportExcel
 
+## User variables
 $Date = Get-Date -Format yyMMdd
 $LogFile = "C:\Temp\Domain_Sites_$Date.xlsx"
+$Domains = @('production.acme.com'
+            'development.acme.com'
+            'acme.com'
+            )
 
-#region Functions
-# Pull Names of sites in ADReplication queries and combine into single string for visual output
-Function Get-SitePartners($SiteIncludes){
-    $SitePartners = @()
-    ForEach($LSite in $SiteIncludes){
-        $SitePartners += Get-ADReplicationSite -Identity $LSite
+## Functions
+# Retrieve site partners and combine into string output
+Function Get-SitePartners{
+    <#
+    .SYNOPSIS
+    Converts AD object array into single comma-separated string
+
+    .DESCRIPTION
+    Takes a provided AD object property with multiple values and combines them into a single string
+
+    .EXAMPLE
+    Get-SitePartners -SiteIncludes (Get-ADReplicationSiteLink).StiesIncluded -DomainName 'development.acme.com'
+
+    .INPUTS
+    String array
+
+    .OUTPUTS
+    String
+
+    .NOTES
+    Author: Stan Crider
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory,
+            HelpMessage = 'What AD object property array would you like to convert to a single string?')]
+        [string[]]
+        $SiteIncludes,
+
+        [Parameter(Mandatory,
+            HelpMessage = 'What domain would you like to retrieve AD objects for?')]
+        [string]
+        $DomainName
+    )
+
+    Process{
+        $SitePartners = @()
+        ForEach($LSite in $SiteIncludes){
+            $SitePartners += Get-ADReplicationSite -Server $DomainName -Identity $LSite
+        }
+        $Output = $SitePartners.Name -join ", "
+        $Output
     }
-    $Output = ($SitePartners.Name | Sort-Object) -join ", "
-    $Output
 }
 
 # Convert number of object items into Excel column headers
@@ -87,39 +127,62 @@ Function Get-ColumnName ([int]$ColumnCount){
     # Output column name
     $CharacterOutput
 }
-#endregion
 
-#region Subnets
-$SubnetsRaw = Get-ADReplicationSubnet -Filter * -Properties Name,Location,Site,Description | Sort-Object Name | Select-Object Name, Location, Description, Site
-$Subnets= @()
-ForEach($Subnet in $SubnetsRaw){
-    $Subnets += [PSCustomObject]@{
-        "Subnet"      = $Subnet.Name
-        "Location"    = $Subnet.Location
-        "Description" = $Subnet.Description
-        "Site"        = Get-SitePartners $Subnet.Site #Change DistinguishedName to Name
-    }
-}
-#endregion
-
-# Get Sites
-$Sites = Get-ADReplicationSite -Properties * -Filter * | Sort-Object Name | Select-Object Name,Location,Description
-
-#region Site Links
-$SiteLinksRaw = Get-ADReplicationSiteLink -Filter * -Properties * | Sort-Object Name | Select-Object Name,Description,Cost,ReplicationFrequencyInMinutes,SitesIncluded
+## Script below
+$Subnets = @()
+$Sites = @()
 $SiteLinks = @()
-ForEach($SiteLink in $SiteLinksRaw){
-    $SiteLinks += [PSCustomObject]@{
-        "Name"         = $SiteLink.Name
-        "Description"  = $SiteLink.Description
-        "Cost"         = $SiteLink.Cost
-        "RepFreq"      = $SiteLink.ReplicationFrequencyInMinutes
-        "Member Sites" = Get-SitePartners $SiteLink.SitesIncluded #Change DistinguishedName to Name
+
+ForEach($Domain in $Domains){
+    # Subnets
+    $SubnetsRaw = Get-ADReplicationSubnet -Server $Domain -Filter * -Properties Name,Location,Site,Description | Sort-Object Name
+
+    ForEach($Subnet in $SubnetsRaw){
+            $SubnetSite = $null
+            If($Subnet.Site){
+                $SubnetSite = Get-SitePartners -SiteIncludes $Subnet.Site -DomainName $Domain
+            }
+
+        $Subnets += [PSCustomObject]@{
+            'Subnet'      = $Subnet.Name
+            'Location'    = $Subnet.Location
+            'Description' = $Subnet.Description
+            'Site'        = $SubnetSite
+            'Domain'      = $Domain
+        }
+    }
+
+    # Sites
+    $SitesRaw = Get-ADReplicationSite -Server $Domain -Filter * -Properties Name,Location,Description | Sort-Object Name
+    ForEach($SiteObj in $SitesRaw){
+        $Sites += [PSCustomObject]@{
+            'Name'        = $SiteObj.Name
+            'Location'    = $SiteObj.Location
+            'Description' = $SiteObj.Description
+            'Domain'      = $Domain
+        }
+    }
+
+    # Site links
+    $SiteLinksRaw = Get-ADReplicationSiteLink -Server $Domain -Filter * -Properties Name,Description,Cost,ReplicationFrequencyInMinutes,SitesIncluded | Sort-Object Name
+    ForEach($SiteLink in $SiteLinksRaw){
+        $MemberSites = $null
+        If($SiteLink.SitesIncluded){
+            $MemberSites = Get-SitePartners -SiteIncludes $SiteLink.SitesIncluded -DomainName $Domain
+        }
+
+        $SiteLinks += [PSCustomObject]@{
+            'Name'         = $SiteLink.Name
+            'Description'  = $SiteLink.Description
+            'Cost'         = $SiteLink.Cost
+            'RepFreq'      = $SiteLink.ReplicationFrequencyInMinutes
+            'Member Sites' = $MemberSites
+            'Domain'       = $Domain
+        }
     }
 }
-#endregion
 
-#region Output to Excel
+## Output
 # Create Excel standard configuration properties
 $ExcelProps = @{
     Autosize = $true;
@@ -146,13 +209,3 @@ $SiteLinkHeaderCount = Get-ColumnName ($SiteLinks | Get-Member | Where-Object{$_
 $SiteLinkHeaderRow = "`$A`$1:`$$SiteLinkHeaderCount`$1"
 $SiteLinkSheetStyle = New-ExcelStyle -Range "'File Servers'$SiteLinkHeaderRow" -HorizontalAlignment Center
 $SiteLinks | Export-Excel @ExcelProps -WorkSheetname "Links" -Style $SiteLinkSheetStyle
-#endregion
-
-#region Output to screen
-Write-Output $Subnets
-Write-Output ("Subnet count: " + ($Subnets | Measure-Object).Count)
-Write-Output $Sites
-Write-Output ("Site count: " + ($Sites | Measure-Object).Count)
-Write-Output $SiteLinks
-Write-Output ("Links count: " + ($SiteLinks | Measure-Object).Count)
-#endregion
