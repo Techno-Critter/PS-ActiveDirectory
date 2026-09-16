@@ -10,7 +10,7 @@ Crap: Get domain controller properties from local domain and outputs to Excel re
 #Requires -Module ImportExcel
 
 # User variables
-$DateName = Get-Date -Format yyyyMMdd
+$DateName = Get-Date -Format yyyyMMdd-hhmm
 $Domain = (Get-ADDomain).DNSRoot
 $LogFile = "C:\Temp\Domain Controllers\DC_$DateName.xlsx"
 
@@ -134,139 +134,133 @@ Function Get-ColumnName ([int]$ColumnCount){
 }
 
 ## Begin script
-# Exit if logfile already exists
-If(Test-Path $LogFile){
-    Write-Host "The file $LogFile already exists. Script terminated."
-}
 # Get domain controllers and info from domain
-Else{
-    Import-Module ActiveDirectory
-    $DomainControllers = Get-ADDomainController -Filter * -Server $Domain | Sort-Object HostName
-    $ForestProps = Get-ADForest
-    $DomainProps = Get-ADDomain
-    $GCCount = 0
-    $DCUpCount = 0
-    $DCCount = ($DomainControllers | Measure-Object).Count
-    $DCArray = @()
-    $ErrorArray = @()
+Import-Module ActiveDirectory
+$DomainControllers = Get-ADDomainController -Filter * -Server $Domain | Sort-Object HostName
+$ForestProps = Get-ADForest
+$DomainProps = Get-ADDomain
+$GCCount = 0
+$DCUpCount = 0
+$DCCount = ($DomainControllers | Measure-Object).Count
+$DCArray = @()
+$ErrorArray = @()
 
-    # Get info for each DC
-    ForEach($DC in $DomainControllers){
-        Write-Host ("Processing " + $DC.HostName + "...")
-        $Uptime = $null
-        $Reboot = $null
-        $DCIPSettings = $null
-        $DCDNSSettings = $null
-        $TimeZone = $null
-        $CurrentTime = $null
-        $ADCompProp = Get-ADComputer -Identity $DC.Name -Properties Description,Location
-       # FSMO roles
-        If($null -ne $DC.OperationMasterRoles){
-            $FSMORoles = $DC.OperationMasterRoles -join ", "
+# Get info for each DC
+ForEach($DC in $DomainControllers){
+    Write-Host ("Processing " + $DC.HostName + "...")
+    $Uptime = $null
+    $Reboot = $null
+    $DCIPSettings = $null
+    $DCDNSSettings = $null
+    $TimeZone = $null
+    $CurrentTime = $null
+    $ADCompProp = Get-ADComputer -Identity $DC.Name -Properties Description,Location
+   # FSMO roles
+    If($null -ne $DC.OperationMasterRoles){
+        $FSMORoles = $DC.OperationMasterRoles -join ", "
+    }
+    # Ping
+    $Online = (Test-Connection -ComputerName $DC.HostName -Quiet -Count 2)
+    # Gather data
+    If($Online){
+        $DCUpCount++
+        Try{
+            $CimSession = New-CimSession -ComputerName $DC.HostName -ErrorAction Stop
+            $DCIPSettings = Get-NetIPAddress -CimSession $CimSession -ErrorAction Stop | Where-Object{$_.IPAddress -eq $DC.IPv4Address}
+            $DCDNSSettings = Get-DnsClientServerAddress -CimSession $CimSession -ErrorAction Stop | Where-Object{($_.InterfaceIndex -eq $DCIPSettings.InterfaceIndex) -and ($_.AddressFamily -eq $DCIPSettings.AddressFamily)}
+            $Class = Get-CimInstance -Class Win32_OperatingSystem -CimSession $CimSession -ErrorAction Stop
+            $TimeZone = Get-CimInstance -Class Win32_TimeZone -CimSession $CimSession -ErrorAction Stop
+            $CurrentTime = Invoke-Command -ComputerName $DC.HostName -ScriptBlock {Get-Date -Format "MM/dd/yyyy HH:mm:ss"} -ErrorAction Stop
+            $Reboot = $Class.LastBootUpTime
+            $Uptime = (((Get-Date) - $Reboot).ToString("d' days 'hh':'mm':'ss"))
+            Remove-CimSession -CimSession $CimSession -ErrorAction Stop
         }
-        # Ping
-        $Online = (Test-Connection -ComputerName $DC.HostName -Quiet -Count 2)
-        # Gather data
-        If($Online){
-            $DCUpCount++
-            Try{
-                $CimSession = New-CimSession -ComputerName $DC.HostName -ErrorAction Stop
-                $DCIPSettings = Get-NetIPAddress -CimSession $CimSession -ErrorAction Stop | Where-Object{$_.IPAddress -eq $DC.IPv4Address}
-                $DCDNSSettings = Get-DnsClientServerAddress -CimSession $CimSession -ErrorAction Stop | Where-Object{($_.InterfaceIndex -eq $DCIPSettings.InterfaceIndex) -and ($_.AddressFamily -eq $DCIPSettings.AddressFamily)}
-                $Class = Get-CimInstance -Class Win32_OperatingSystem -CimSession $CimSession -ErrorAction Stop
-                $TimeZone = Get-CimInstance -Class Win32_TimeZone -CimSession $CimSession -ErrorAction Stop
-                $CurrentTime = Invoke-Command -ComputerName $DC.HostName -ScriptBlock {Get-Date -Format "MM/dd/yyyy HH:mm:ss"} -ErrorAction Stop
-                $Reboot = $Class.LastBootUpTime
-                $Uptime = (((Get-Date) - $Reboot).ToString("d' days 'hh':'mm':'ss"))
-                Remove-CimSession -CimSession $CimSession -ErrorAction Stop
-            }
-            Catch{
-                $ErrorArray += [PSCustomObject]@{
-                    "Name"  = $DC.HostName
-                    "Error" = $_.Exception.Message
-                }
-            }
-        }
-        Else{
+        Catch{
             $ErrorArray += [PSCustomObject]@{
                 "Name"  = $DC.HostName
-                "Error" = "Not responding to ping"
+                "Error" = $_.Exception.Message
             }
         }
-        
-        If($DC.IsGlobalCatalog){
-            $GCCount++
-        }
-        # Add data to array
-        $DCArray += [PSCustomObject]@{
-            "Name"          = $DC.HostName
-            "GC"            = $DC.IsGlobalCatalog
-            "OS"            = $DC.OperatingSystem
-            "IP"            = $DC.IPv4Address
-            "DNS Addresses" = $DCDNSSettings.ServerAddresses -join ", "
-            "Site"          = $DC.Site
-            "Online"        = $Online
-            "Enabled"       = $ADCompProp.Enabled
-            "Uptime"        = $Uptime
-            "LastBoot"      = $Reboot
-            "Current Time"  = $CurrentTime
-            "TimeZone"      = $TimeZone.Caption
-            "Location"      = $ADCompProp.Location
-            "Description"   = $ADCompProp.Description
-            "FSMO"          = $FSMORoles
+    }
+    Else{
+        $ErrorArray += [PSCustomObject]@{
+            "Name"  = $DC.HostName
+            "Error" = "Not responding to ping"
         }
     }
-
-    $DomainStatObj = [PSCustomObject]@{
-        "Name"         = $DomainProps.Name
-        "Forest Name"  = $ForestProps.Name
-        "Forest Level" = $ForestProps.ForestMode
-        "Domain Name"  = $DomainProps.Name
-        "Domain Level" = $DomainProps.DomainMode
-        "DCs"          = $DCCount
-        "GCs"          = $GCCount
-        "Online"       = $DCUpCount
-    }
-
-    ## Export to Excel
-    # Create Excel standard configuration properties
-    $ExcelProps = @{
-        Autosize = $true;
-        FreezeTopRow = $true;
-        BoldTopRow = $true;
-    }
-
-    $ExcelProps.Path = $LogFile
-
-    # DC worksheet
-    $DCArrayHeaderCount = Get-ColumnName ($DCArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
-    $DCArrayHeaderRow = "`$A`$1:`$$DCArrayHeaderCount`$1"
-    $LastRow = ($DCArray | Measure-Object).Count + 1
-    $GC = "DCs!`$B`$2:`$B`$$LastRow"
-    $Online = "DCs!`$G`$2:`$G`$$LastRow"
-
-    $DCArrayStyle = @()
-    $DCArrayStyle += New-ExcelStyle -Range "'DCs'$DCArrayHeaderRow" -HorizontalAlignment Center
-
-    $DCArrayConditionalText = @()
-    $DCArrayConditionalText += New-ConditionalText -Range $GC -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Brown -BackgroundColor Wheat
-    $DCArrayConditionalText += New-ConditionalText -Range $Online -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Maroon -BackgroundColor Pink
-
-    $DCArray | Sort-Object "Name" | Export-Excel @ExcelProps -WorksheetName "DCs" -ConditionalText $DCArrayConditionalText -Style $DCArrayStyle
     
-    # Status worksheet
-    $DomainStatHeaderCount = Get-ColumnName ($DomainStatObj | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
-    $DomainStatHeaderRow = "`$A`$1:`$$DomainStatHeaderCount`$1"
-    $DomainStatStyle = @()
-    $DomainStatStyle += New-ExcelStyle -Range "'Status'$DomainStatHeaderRow" -HorizontalAlignment Center
-    $DomainStatObj | Format-TransposeObject | Export-Excel @ExcelProps -WorksheetName "Status" -Style $DomainStatStyle
-    
-    # Errors worksheet
-    If($ErrorArray){
-        $ErrorArrayHeaderCount = Get-ColumnName ($DCArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
-        $ErrorArrayHeaderRow = "`$A`$1:`$$ErrorArrayHeaderCount`$1"
-        $ErrorArrayStyle = @()
-        $ErrorArrayStyle += New-ExcelStyle -Range "'Errors'$ErrorArrayHeaderRow" -HorizontalAlignment Center
-        $ErrorArray | Sort-Object "Name" | Export-Excel @ExcelProps -WorksheetName "Errors" -Style $ErrorArrayStyle
+    If($DC.IsGlobalCatalog){
+        $GCCount++
     }
+    # Add data to array
+    $DCArray += [PSCustomObject]@{
+        "Name"          = $DC.HostName
+        "GC"            = $DC.IsGlobalCatalog
+        "OS"            = $DC.OperatingSystem
+        "IP"            = $DC.IPv4Address
+        "DNS Addresses" = $DCDNSSettings.ServerAddresses -join ", "
+        "Site"          = $DC.Site
+        "Online"        = $Online
+        "Enabled"       = $ADCompProp.Enabled
+        "Uptime"        = $Uptime
+        "LastBoot"      = $Reboot
+        "Current Time"  = $CurrentTime
+        "TimeZone"      = $TimeZone.Caption
+        "Location"      = $ADCompProp.Location
+        "Description"   = $ADCompProp.Description
+        "FSMO"          = $FSMORoles
+    }
+}
+
+$DomainStatObj = [PSCustomObject]@{
+    "Name"         = $DomainProps.Name
+    "Forest Name"  = $ForestProps.Name
+    "Forest Level" = $ForestProps.ForestMode
+    "Domain Name"  = $DomainProps.Name
+    "Domain Level" = $DomainProps.DomainMode
+    "DCs"          = $DCCount
+    "GCs"          = $GCCount
+    "Online"       = $DCUpCount
+}
+
+## Export to Excel
+# Create Excel standard configuration properties
+$ExcelProps = @{
+    Autosize = $true;
+    FreezeTopRow = $true;
+    BoldTopRow = $true;
+}
+
+$ExcelProps.Path = $LogFile
+
+# DC worksheet
+$DCArrayHeaderCount = Get-ColumnName ($DCArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+$DCArrayHeaderRow = "`$A`$1:`$$DCArrayHeaderCount`$1"
+$LastRow = ($DCArray | Measure-Object).Count + 1
+$GC = "DCs!`$B`$2:`$B`$$LastRow"
+$Online = "DCs!`$G`$2:`$G`$$LastRow"
+
+$DCArrayStyle = @()
+$DCArrayStyle += New-ExcelStyle -Range "'DCs'$DCArrayHeaderRow" -HorizontalAlignment Center
+
+$DCArrayConditionalText = @()
+$DCArrayConditionalText += New-ConditionalText -Range $GC -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Brown -BackgroundColor Wheat
+$DCArrayConditionalText += New-ConditionalText -Range $Online -ConditionalType BeginsWith "FALSE" -ConditionalTextColor Maroon -BackgroundColor Pink
+
+$DCArray | Sort-Object "Name" | Export-Excel @ExcelProps -WorksheetName "DCs" -ConditionalText $DCArrayConditionalText -Style $DCArrayStyle
+
+# Status worksheet
+$DomainStatHeaderCount = Get-ColumnName ($DomainStatObj | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+$DomainStatHeaderRow = "`$A`$1:`$$DomainStatHeaderCount`$1"
+$DomainStatStyle = @()
+$DomainStatStyle += New-ExcelStyle -Range "'Status'$DomainStatHeaderRow" -HorizontalAlignment Center
+$DomainStatObj | Format-TransposeObject | Export-Excel @ExcelProps -WorksheetName "Status" -Style $DomainStatStyle
+
+# Errors worksheet
+If($ErrorArray){
+    $ErrorArrayHeaderCount = Get-ColumnName ($DCArray | Get-Member | Where-Object{$_.MemberType -match "NoteProperty"} | Measure-Object).Count
+    $ErrorArrayHeaderRow = "`$A`$1:`$$ErrorArrayHeaderCount`$1"
+    $ErrorArrayStyle = @()
+    $ErrorArrayStyle += New-ExcelStyle -Range "'Errors'$ErrorArrayHeaderRow" -HorizontalAlignment Center
+    $ErrorArray | Sort-Object "Name" | Export-Excel @ExcelProps -WorksheetName "Errors" -Style $ErrorArrayStyle
 }
